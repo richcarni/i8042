@@ -1,0 +1,41 @@
+--- i8042.c	2021-05-08 12:34:32.000000000 +1000
++++ src/linux-5.4.0/drivers/input/serio/i8042.c	2021-06-08 09:58:12.769546301 +1000
+@@ -523,18 +523,36 @@
+ 	unsigned int port_no;
+ 	bool filtered;
+ 	int ret = 1;
++	int i;
+ 
+ 	spin_lock_irqsave(&i8042_lock, flags);
+ 
+ 	str = i8042_read_status();
+ 	if (unlikely(~str & I8042_STR_OBF)) {
+ 		spin_unlock_irqrestore(&i8042_lock, flags);
+-		if (irq)
+-			dbg("Interrupt %d, without any data\n", irq);
++		if (irq) {
++			printk(KERN_DEBUG KBUILD_MODNAME ": [%d] Interrupt %d, without any data, read status = %d\n", \
++				(int) (jiffies - i8042_start_time), irq, str);
++			for (i=0; i<4; i++) {
++				// udelay(50); //printk prob provides sufficient delay
++				spin_lock_irqsave(&i8042_lock, flags);
++
++				str = i8042_read_status();
++				if (unlikely(~str & I8042_STR_OBF)) {
++					spin_unlock_irqrestore(&i8042_lock, flags);
++					printk(KERN_DEBUG KBUILD_MODNAME ": [%d] Interrupt %d, without any data, retry %d, read status = %d\n", \
++					(int) (jiffies - i8042_start_time), irq, i+1, str);
++				}
++				else {
++					goto next;
++				}				
++			}
++		}
+ 		ret = 0;
+ 		goto out;
+ 	}
+ 
++ next:
+ 	data = i8042_read_data();
+ 
+ 	if (i8042_mux_present && (str & I8042_STR_AUXDATA)) {
